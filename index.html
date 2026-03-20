@@ -169,10 +169,20 @@
   .vsc-label { flex: 1; }
   .vsc-status { font-size: 11px; opacity: .85; white-space: nowrap; }
   .view-booking-list { list-style: none; padding: 8px 12px 10px; background: #faf8ff; }
-  .view-booking-row { display: flex; align-items: flex-start; gap: 8px; padding: 5px 0; border-bottom: 1px solid #ede8fb; font-size: 12px; }
+  .view-booking-row { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-bottom: 1px solid #ede8fb; font-size: 12px; }
   .view-booking-row:last-child { border-bottom: none; }
-  .vbr-name { font-weight: 500; color: var(--booked-text); min-width: 80px; }
-  .vbr-time { color: var(--text-muted); font-size: 11px; }
+  .vbr-info { flex: 1; }
+  .vbr-name { font-weight: 500; color: var(--booked-text); }
+  .vbr-time { color: var(--text-muted); font-size: 11px; margin-top: 1px; }
+  .vbr-actions { display: flex; gap: 4px; flex-shrink: 0; }
+  .vbr-btn {
+    border: none; border-radius: 5px; font-family: inherit;
+    font-size: 10px; font-weight: 500; padding: 3px 8px;
+    cursor: pointer; transition: opacity .15s; white-space: nowrap;
+  }
+  .vbr-btn:hover { opacity: .75; }
+  .vbr-edit-btn { background: #e8f0fe; color: var(--accent); }
+  .vbr-cancel-btn { background: #fde8e8; color: var(--danger); }
 
   /* ===== BOOKING FORM ===== */
   .booking-slot-info { background: var(--available); border-radius: 10px; padding: 12px 14px; margin-bottom: 16px; }
@@ -379,6 +389,32 @@
   </div>
 </div>
 
+<!-- 予約編集モーダル（閲覧者用） -->
+<div class="overlay" id="edit-booking-modal">
+  <div class="modal">
+    <div class="modal-date" id="edit-booking-modal-date"></div>
+    <h3>予約を編集・取り消し</h3>
+    <div class="booking-slot-info">
+      <div class="bsi-label">枠</div>
+      <div class="bsi-value" id="edit-booking-slot-label"></div>
+    </div>
+    <div>
+      <label class="form-label">お名前 <span style="color:var(--danger)">*</span></label>
+      <input type="text" class="form-input" id="edit-booking-name-input" placeholder="例：山田 太郎" />
+    </div>
+    <div style="margin-top:12px">
+      <label class="form-label">希望時間 <span style="color:var(--danger)">*</span></label>
+      <input type="text" class="form-input" id="edit-booking-time-input" placeholder="例：10:30〜11:00、午後なら可" />
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-danger" style="flex:none; padding:10px 16px;" id="cancel-booking-btn" onclick="cancelBookingByUser()">予約を取り消す</button>
+      <button class="btn btn-secondary" onclick="closeModal('edit-booking-modal')">閉じる</button>
+      <button class="btn btn-primary" id="update-booking-btn" onclick="updateBookingByUser()">保存</button>
+    </div>
+  </div>
+</div>
+
+
 <!-- 削除確認モーダル -->
 <div class="overlay" id="delete-confirm-modal">
   <div class="modal pw-modal">
@@ -415,6 +451,7 @@ let editingDate = null;
 let viewingDate = null;
 let bookingSlotRef = null;
 let deleteAction = null;
+let editBookingRef = null; // { slotId, bookingId }
 
 // slots: { 'YYYY-MM-DD': [ { id, label, bookings:[{id,name,time}] } ] }
 let slots = {};
@@ -783,8 +820,14 @@ function renderViewSlotList() {
     const statusText = hasB ? `👥 ${s.bookings.length}人が予約 — タップして追加` : '✅ 空き — タップして予約';
     const bookingRows = hasB ? `<ul class="view-booking-list">${s.bookings.map(b => `
       <li class="view-booking-row">
-        <span class="vbr-name">👤 ${b.name}</span>
-        ${b.time ? `<span class="vbr-time">🕐 ${b.time}</span>` : ''}
+        <div class="vbr-info">
+          <div class="vbr-name">👤 ${b.name}</div>
+          ${b.time ? `<div class="vbr-time">🕐 ${b.time}</div>` : ''}
+        </div>
+        <div class="vbr-actions">
+          <button class="vbr-btn vbr-edit-btn" onclick="openEditBookingModal(event,'${s.id}','${b.id}','${b.name.replace(/'/g,'\'')}','${b.time.replace(/'/g,'\'')}')">編集</button>
+          <button class="vbr-btn vbr-cancel-btn" onclick="openEditBookingModal(event,'${s.id}','${b.id}','${b.name.replace(/'/g,'\'')}','${b.time.replace(/'/g,'\'')}')">取消</button>
+        </div>
       </li>`).join('')}</ul>` : '';
     return `<li class="view-slot-card">
       <div class="view-slot-card-header ${headerCls}" onclick="openBookFromView(${i})">
@@ -861,6 +904,65 @@ function renderBookedList() {
     </div>`).join('');
 }
 
+
+// ===== EDIT BOOKING (閲覧者) =====
+function openEditBookingModal(e, slotId, bookingId, name, time) {
+  e.stopPropagation();
+  editBookingRef = { slotId, bookingId };
+
+  // 枠のlabelと日付を探す
+  let slotLabel = '', dk = '';
+  Object.entries(slots).forEach(([d, daySlots]) => {
+    daySlots.forEach(s => {
+      if (s.id === slotId) { slotLabel = s.label; dk = d; }
+    });
+  });
+
+  document.getElementById('edit-booking-modal-date').textContent = dk ? formatDate(dk) : '';
+  document.getElementById('edit-booking-slot-label').textContent = slotLabel;
+  document.getElementById('edit-booking-name-input').value = name;
+  document.getElementById('edit-booking-time-input').value = time;
+  document.getElementById('edit-booking-modal').classList.add('open');
+  setTimeout(() => document.getElementById('edit-booking-name-input').focus(), 100);
+}
+
+async function updateBookingByUser() {
+  const name = document.getElementById('edit-booking-name-input').value.trim();
+  const time = document.getElementById('edit-booking-time-input').value.trim();
+  if (!name) { document.getElementById('edit-booking-name-input').focus(); return; }
+  if (!time) { document.getElementById('edit-booking-time-input').focus(); return; }
+
+  const btn = document.getElementById('update-booking-btn');
+  btn.disabled = true;
+  const result = await apiPost({ action: 'updateBooking', id: editBookingRef.bookingId, name, time });
+  if (result) {
+    showToast('予約を更新しました');
+    closeModal('edit-booking-modal');
+    await refreshData();
+    // 元の日付モーダルを再表示
+    const dk = Object.keys(slots).find(d => slots[d].some(s => s.id === editBookingRef.slotId));
+    if (dk) setTimeout(() => openViewDayModal(dk), 300);
+  }
+  btn.disabled = false;
+}
+
+async function cancelBookingByUser() {
+  if (!confirm('この予約を取り消してもよいですか？')) return;
+  const btn = document.getElementById('cancel-booking-btn');
+  btn.disabled = true;
+  const result = await apiPost({ action: 'deleteBooking', id: editBookingRef.bookingId });
+  if (result) {
+    showToast('予約を取り消しました');
+    closeModal('edit-booking-modal');
+    await refreshData();
+    const dk = Object.keys(slots).find(d =>
+      (slots[d] || []).some(s => s.id === editBookingRef.slotId)
+    );
+    if (dk) setTimeout(() => openViewDayModal(dk), 300);
+  }
+  btn.disabled = false;
+}
+
 // ===== DELETE CONFIRM =====
 function requestDelete(desc, callback) {
   deleteAction = callback;
@@ -899,6 +1001,7 @@ document.getElementById('book-time-input').addEventListener('keydown', e => { if
 document.getElementById('pw-input').addEventListener('keydown',        e => { if (e.key === 'Enter') submitPassword(); });
 document.getElementById('pw-new-confirm').addEventListener('keydown',  e => { if (e.key === 'Enter') saveNewPassword(); });
 document.getElementById('delete-pw-input').addEventListener('keydown', e => { if (e.key === 'Enter') executeDelete(); });
+document.getElementById('edit-booking-time-input').addEventListener('keydown', e => { if (e.key === 'Enter') updateBookingByUser(); });
 </script>
 </body>
 </html>
