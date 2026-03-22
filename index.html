@@ -528,12 +528,7 @@
 </div>
 
 <script>
-// =====================================================
-// ★ GASのウェブアプリURLをここに貼り付けてください ★
-// =====================================================
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbzSI5zBf_fsGH7-Koeb-IjLTeTF_yqmboRN16td-FIwHnq4PsBZw-xHaSnOLTuXjyhD/exec';
-// =====================================================
-
 // ===== パスワードハッシュ化 =====
 async function hashPassword(pw) {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(pw));
@@ -541,7 +536,7 @@ async function hashPassword(pw) {
 }
 
 // admin1234 のSHA-256ハッシュ値
-const DEFAULT_HASH = '50b0d328b31a9a8ad37b5f7db24ef7f4c4cde89e5a53f0af3e9e4e60d0d2c3a7';
+const DEFAULT_HASH = 'ac9689e2272427085e35b9d3e3e8bed88cb3434828b43b86fc0596cad4c6e270';
 function getPasswordHash() { return localStorage.getItem('cal_password_hash') || DEFAULT_HASH; }
 
 // ===== STATE =====
