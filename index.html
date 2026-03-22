@@ -357,7 +357,6 @@
     <span id="mode-banner-text">閲覧・予約モード — 枠をクリックして予約や状況を確認できます</span>
   </div>
 
-
   <!-- お知らせ欄 -->
   <div class="announcement-wrap" id="announcement-wrap">
     <div class="announcement-label">
@@ -510,7 +509,6 @@
   </div>
 </div>
 
-
 <!-- 削除確認モーダル -->
 <div class="overlay" id="delete-confirm-modal">
   <div class="modal pw-modal">
@@ -536,8 +534,15 @@
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbzSI5zBf_fsGH7-Koeb-IjLTeTF_yqmboRN16td-FIwHnq4PsBZw-xHaSnOLTuXjyhD/exec';
 // =====================================================
 
-const DEFAULT_PASSWORD = 'admin1234';
-function getPassword() { return localStorage.getItem('cal_password') || DEFAULT_PASSWORD; }
+// ===== パスワードハッシュ化 =====
+async function hashPassword(pw) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(pw));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+
+// admin1234 のSHA-256ハッシュ値
+const DEFAULT_HASH = '50b0d328b31a9a8ad37b5f7db24ef7f4c4cde89e5a53f0af3e9e4e60d0d2c3a7';
+function getPasswordHash() { return localStorage.getItem('cal_password_hash') || DEFAULT_HASH; }
 
 // ===== STATE =====
 let mode = 'view';
@@ -550,7 +555,6 @@ let deleteAction = null;
 let editBookingRef = null;
 let announcementText = '';
 
-// slots: { 'YYYY-MM-DD': [ { id, label, bookings:[{id,name,time}] } ] }
 let slots = {};
 
 const now = new Date();
@@ -630,10 +634,8 @@ function applyModeStyle(m) {
   document.getElementById('mode-banner').className = 'mode-banner ' + b.cls;
   document.getElementById('mode-banner-icon').textContent = b.icon;
   document.getElementById('mode-banner-text').textContent = b.text;
-  // 管理者モードのときだけ「編集」リンクを表示
   const editLink = document.getElementById('announcement-edit-link');
   if (editLink) editLink.style.display = (m === 'edit') ? 'inline' : 'none';
-  // 管理者モード以外でedit-areaが開いていたら閉じる
   if (m !== 'edit') {
     document.getElementById('announcement-edit-area').classList.remove('open');
   }
@@ -648,8 +650,9 @@ function requestAdminMode() {
   setTimeout(() => document.getElementById('pw-input').focus(), 100);
 }
 
-function submitPassword() {
-  if (document.getElementById('pw-input').value === getPassword()) {
+async function submitPassword() {
+  const hash = await hashPassword(document.getElementById('pw-input').value);
+  if (hash === getPasswordHash()) {
     isAdminLoggedIn = true;
     closeModal('pw-modal');
     document.getElementById('admin-badge').style.display = 'block';
@@ -677,12 +680,13 @@ function showSetPassword() {
   setTimeout(() => document.getElementById('pw-new-input').focus(), 100);
 }
 
-function saveNewPassword() {
+async function saveNewPassword() {
   const a = document.getElementById('pw-new-input').value;
   const b = document.getElementById('pw-new-confirm').value;
   if (a.length < 4) { document.getElementById('pw-set-error').textContent = '4文字以上で設定してください'; return; }
   if (a !== b)      { document.getElementById('pw-set-error').textContent = 'パスワードが一致しません'; return; }
-  localStorage.setItem('cal_password', a);
+  const hash = await hashPassword(a);
+  localStorage.setItem('cal_password_hash', hash);
   closeModal('pw-set-modal');
   showToast('パスワードを更新しました');
 }
@@ -1008,13 +1012,11 @@ function renderBookedList() {
     </div>`).join('');
 }
 
-
 // ===== EDIT BOOKING (閲覧者) =====
 function openEditBookingModal(e, slotId, bookingId, name, time) {
   e.stopPropagation();
   editBookingRef = { slotId, bookingId };
 
-  // 枠のlabelと日付を探す
   let slotLabel = '', dk = '';
   Object.entries(slots).forEach(([d, daySlots]) => {
     daySlots.forEach(s => {
@@ -1043,7 +1045,6 @@ async function updateBookingByUser() {
     showToast('予約を更新しました');
     closeModal('edit-booking-modal');
     await refreshData();
-    // 元の日付モーダルを再表示
     const dk = Object.keys(slots).find(d => slots[d].some(s => s.id === editBookingRef.slotId));
     if (dk) setTimeout(() => openViewDayModal(dk), 300);
   }
@@ -1066,7 +1067,6 @@ async function cancelBookingByUser() {
   }
   btn.disabled = false;
 }
-
 
 // ===== ANNOUNCEMENT =====
 async function loadAnnouncement() {
@@ -1131,8 +1131,8 @@ function requestDelete(desc, callback) {
 }
 
 async function executeDelete() {
-  const val = document.getElementById('delete-pw-input').value;
-  if (val !== getPassword()) {
+  const hash = await hashPassword(document.getElementById('delete-pw-input').value);
+  if (hash !== getPasswordHash()) {
     document.getElementById('delete-pw-error').textContent = 'パスワードが違います';
     document.getElementById('delete-pw-input').value = '';
     document.getElementById('delete-pw-input').focus();
