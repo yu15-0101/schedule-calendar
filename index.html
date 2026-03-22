@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>2026WRO空き時間カレンダー</title>
+<title>空き時間カレンダー</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500&family=DM+Mono:wght@300;400&display=swap');
 
@@ -65,6 +65,64 @@
   .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
   .toast.error { background: var(--danger); }
 
+
+  /* ===== ANNOUNCEMENT ===== */
+  .announcement-wrap {
+    margin-bottom: 20px;
+  }
+  .announcement-box {
+    border-radius: 10px;
+    padding: 12px 16px;
+    font-size: 13px;
+    line-height: 1.7;
+    white-space: pre-wrap;
+    word-break: break-word;
+    background: #fffbea;
+    border: 1px solid #f0d060;
+    color: #5a4200;
+    min-height: 44px;
+  }
+  .announcement-box.empty {
+    color: var(--text-muted);
+    font-style: italic;
+  }
+  .announcement-edit-area {
+    display: none;
+    margin-top: 8px;
+  }
+  .announcement-edit-area.open { display: block; }
+  .announcement-textarea {
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-family: inherit;
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--text);
+    background: #fafafa;
+    resize: vertical;
+    min-height: 80px;
+    outline: none;
+    transition: border-color .15s;
+  }
+  .announcement-textarea:focus { border-color: var(--accent); }
+  .announcement-edit-btns {
+    display: flex; gap: 8px; margin-top: 8px;
+  }
+  .announcement-label {
+    font-size: 11px; font-weight: 500;
+    letter-spacing: .06em; text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .announcement-edit-link {
+    font-size: 11px; color: var(--accent);
+    cursor: pointer; text-decoration: underline;
+    text-underline-offset: 2px; font-weight: 400;
+    text-transform: none; letter-spacing: 0;
+  }
   /* ===== MODE BANNER ===== */
   .mode-banner {
     display: flex; align-items: center; gap: 10px;
@@ -279,7 +337,7 @@
   <header>
     <div>
       <div class="logo">Schedule</div>
-      <h1>2026WRO王子：自習時間カレンダー</h1>
+      <h1>空き時間カレンダー</h1>
     </div>
   </header>
 
@@ -297,6 +355,23 @@
   <div class="mode-banner view" id="mode-banner">
     <span id="mode-banner-icon">📅</span>
     <span id="mode-banner-text">閲覧・予約モード — 枠をクリックして予約や状況を確認できます</span>
+  </div>
+
+
+  <!-- お知らせ欄 -->
+  <div class="announcement-wrap" id="announcement-wrap">
+    <div class="announcement-label">
+      <span>📢 お知らせ</span>
+      <span class="announcement-edit-link" id="announcement-edit-link" style="display:none" onclick="toggleAnnouncementEdit()">編集</span>
+    </div>
+    <div class="announcement-box empty" id="announcement-box">（お知らせはありません）</div>
+    <div class="announcement-edit-area" id="announcement-edit-area">
+      <textarea class="announcement-textarea" id="announcement-textarea" placeholder="保護者・生徒へのお知らせを入力してください"></textarea>
+      <div class="announcement-edit-btns">
+        <button class="btn btn-secondary" style="flex:none; padding:8px 16px;" onclick="toggleAnnouncementEdit()">キャンセル</button>
+        <button class="btn btn-primary" id="save-announcement-btn" onclick="saveAnnouncement()">保存</button>
+      </div>
+    </div>
   </div>
 
   <div id="calendar-area">
@@ -364,7 +439,7 @@
     <ul class="slot-list" id="edit-slot-list"></ul>
     <div class="form-section">
       <label class="form-label">時間帯を追加（例：10:00〜11:00）</label>
-      <input type="text" class="form-input" id="new-slot-input" placeholder="例：14:00〜15:00" />
+      <input type="text" class="form-input" id="new-slot-input" placeholder="例：14:00〜15:00　面談可" />
     </div>
     <div class="btn-row">
       <button class="btn btn-secondary" onclick="closeModal('edit-modal')">閉じる</button>
@@ -472,7 +547,8 @@ let editingDate = null;
 let viewingDate = null;
 let bookingSlotRef = null;
 let deleteAction = null;
-let editBookingRef = null; // { slotId, bookingId }
+let editBookingRef = null;
+let announcementText = '';
 
 // slots: { 'YYYY-MM-DD': [ { id, label, bookings:[{id,name,time}] } ] }
 let slots = {};
@@ -536,7 +612,7 @@ async function refreshData() {
 
 // ===== 初期ロード =====
 (async () => {
-  await apiGet();
+  await Promise.all([apiGet(), loadAnnouncement()]);
   renderCalendar();
 })();
 
@@ -554,6 +630,13 @@ function applyModeStyle(m) {
   document.getElementById('mode-banner').className = 'mode-banner ' + b.cls;
   document.getElementById('mode-banner-icon').textContent = b.icon;
   document.getElementById('mode-banner-text').textContent = b.text;
+  // 管理者モードのときだけ「編集」リンクを表示
+  const editLink = document.getElementById('announcement-edit-link');
+  if (editLink) editLink.style.display = (m === 'edit') ? 'inline' : 'none';
+  // 管理者モード以外でedit-areaが開いていたら閉じる
+  if (m !== 'edit') {
+    document.getElementById('announcement-edit-area').classList.remove('open');
+  }
 }
 
 // ===== PASSWORD =====
@@ -980,6 +1063,58 @@ async function cancelBookingByUser() {
       (slots[d] || []).some(s => s.id === editBookingRef.slotId)
     );
     if (dk) setTimeout(() => openViewDayModal(dk), 300);
+  }
+  btn.disabled = false;
+}
+
+
+// ===== ANNOUNCEMENT =====
+async function loadAnnouncement() {
+  try {
+    const res = await fetch(`${GAS_URL}?action=getAnnouncement`);
+    const data = await res.json();
+    announcementText = data.text || '';
+  } catch(e) {
+    announcementText = '';
+  }
+  renderAnnouncement();
+}
+
+function renderAnnouncement() {
+  const box = document.getElementById('announcement-box');
+  if (!box) return;
+  if (announcementText.trim()) {
+    box.textContent = announcementText;
+    box.classList.remove('empty');
+  } else {
+    box.textContent = '（お知らせはありません）';
+    box.classList.add('empty');
+  }
+}
+
+function toggleAnnouncementEdit() {
+  const area = document.getElementById('announcement-edit-area');
+  const ta   = document.getElementById('announcement-textarea');
+  const isOpen = area.classList.contains('open');
+  if (!isOpen) {
+    ta.value = announcementText;
+    area.classList.add('open');
+    setTimeout(() => ta.focus(), 100);
+  } else {
+    area.classList.remove('open');
+  }
+}
+
+async function saveAnnouncement() {
+  const text = document.getElementById('announcement-textarea').value;
+  const btn  = document.getElementById('save-announcement-btn');
+  btn.disabled = true;
+  const result = await apiPost({ action: 'setAnnouncement', text });
+  if (result) {
+    announcementText = text;
+    renderAnnouncement();
+    document.getElementById('announcement-edit-area').classList.remove('open');
+    showToast('お知らせを保存しました');
   }
   btn.disabled = false;
 }
