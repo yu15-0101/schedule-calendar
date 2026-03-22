@@ -337,7 +337,7 @@
   <header>
     <div>
       <div class="logo">Schedule</div>
-      <h1>空き時間カレンダー</h1>
+      <h1>2026WRO王子：空き時間カレンダー</h1>
     </div>
   </header>
 
@@ -535,7 +535,7 @@ async function hashPassword(pw) {
   return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
 }
 
-// admin1234 のSHA-256ハッシュ値
+
 const DEFAULT_HASH = 'ac9689e2272427085e35b9d3e3e8bed88cb3434828b43b86fc0596cad4c6e270';
 function getPasswordHash() { return localStorage.getItem('cal_password_hash') || DEFAULT_HASH; }
 
