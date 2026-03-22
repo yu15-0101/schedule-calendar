@@ -816,7 +816,15 @@ function renderMobileList() {
   }
 
   if (!hasAny) html = '<div style="text-align:center;padding:32px;color:var(--text-muted);font-size:14px;">この月に空き枠はありません</div>';
-  container.innerHTML = html;
+
+  container.innerHTML = `
+    <div style="display:flex; align-items:center; gap:16px; margin-bottom:16px;">
+      <button class="nav-btn" onclick="changeMonth(-1)">‹</button>
+      <span style="font-size:16px; font-weight:500;">${currentYear}年 ${currentMonth + 1}月</span>
+      <button class="nav-btn" onclick="changeMonth(1)">›</button>
+    </div>
+    ${html}
+  `;
 }
 
 function toggleMobileDay(headerEl) {
